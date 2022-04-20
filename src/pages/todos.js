@@ -1,70 +1,130 @@
-import useSWR, { SWRConfig } from "swr";
-import { useEffect, useState } from 'react';
+import useSWR, { SWRConfig, useSWRConfig } from 'swr'
+import { useState } from 'react'
 
-import axios from '@/lib/axios';
+import axios from '@/lib/axios'
 
-const fetcher = (url) => fetch(url,  {
-    headers: {
-     'X-Requested-With': 'XMLHttpRequest',
- },
- withCredentials: true,
-}).then((res) => res.json());
-const API = "http://127.0.0.1:8000/api/todos";
-
-export async function getServerSideProps() {
-  console.log("10")
-  const repoInfo = await fetcher(API);
-  return {
-    props: {
-      fallback: {
-        [API]: repoInfo
-      }
-    }
-  };
+const endpoints = {
+    list: '/api/todos',
 }
 
+const initialTodoFormData = {
+    title: '',
+    description: '',
+}
+
+export async function getServerSideProps() {
+    const { data: repoInfo } = await axios.get(endpoints.list)
+    return {
+        props: {
+            fallback: {
+                [endpoints.list]: repoInfo,
+            },
+        },
+    }
+}
+
+// TODO:
+// 2. Use CSS Grid
+// 3. The Form could be its own component separate from the list.
+// 4. Consider a getter and setter for data objects. Such as getting the id from a todo.
+
 const Todos = () => {
-    const { data, error } = useSWR(API);
+    const [newTodo, setNewTodo] = useState(initialTodoFormData)
+    const { data } = useSWR(endpoints.list, () =>
+        axios.get(endpoints.list).then(res => res.data),
+    )
+    const { mutate } = useSWRConfig()
 
-    // const getTodos = async () => {
-    //     const fetchedTodos = await axios.get('/api/todos').then(res => {
-    //         return res.data
-    //     });
-    //     console.log(fetchedTodos);
-    //     setTodos(fetchedTodos);
-    // }
-
-    // useEffect(() => {
-    //     getTodos();
-    // }, [])
-    // const corgo = JSON.parse(data);
-    // console.log(corgo);
-
-    return (
-        <div className="container flex m-auto">
-        <h1>Todos</h1>
-        <ul>
-            {data?.map((todo) => {
-                return <li><p>{todo.title}</p><p>{todo.description}</p><input type="checkbox" checked={todo.completed}/></li>
-            })}
-            <li>
-            <a href="/todos/1">Todo 1</a>
-            </li>
-            <li>
-            <a href="/todos/2">Todo 2</a>
-            </li>
-            <li>
-            <a href="/todos/3">Todo 3</a>
-            </li>
-        </ul>
-        </div>
-    );
+    const updateTodo = async (id, newData) => {
+        await axios.put(`${endpoints.list}/${id}`, newData)
+        mutate(endpoints.list)
     }
 
-    export default function App({ fallback }) {
-        return (
-          <SWRConfig value={{ fallback }}>
+    const createTodo = async newData => {
+        await axios.post(endpoints.list, newData)
+        mutate(endpoints.list)
+    }
+
+    const handleTodoChange = e => {
+        setNewTodo({
+            ...newTodo,
+            [e.target.name]: e.target.value,
+        })
+    }
+
+    /** This method updates the server first then tells the SWR cache that the key "/api/todos" has been updated.
+     * Note: the fetch is intertwined with the form element handler.
+     */
+    const handleTodoCreate = async e => {
+        e.preventDefault()
+        await createTodo(newTodo)
+        setNewTodo(initialTodoFormData)
+    }
+
+    // Should separate the update logic from the todo check logic as update will expand.
+    const handleTodoUpdate = async (e, todo) => {
+        e.preventDefault()
+        console.log(e.target.name, e.target.checked)
+        console.log(todo)
+        const newData = { ...todo, [e.target.name]: e.target.checked }
+        updateTodo(todo.id, newData)
+    }
+
+    return (
+        <div className="container flex">
+            <div className="container flex justify-center">
+                <h1>Create New Todo</h1>
+                <div className="flex items-center">
+                    <div className="w-1/2 flex flex-col items-center">
+                        <form onSubmit={handleTodoCreate}>
+                            <label htmlFor="title">Title</label>
+                            <input
+                                type="text"
+                                name="title"
+                                value={newTodo.title}
+                                onChange={handleTodoChange}
+                            />
+
+                            <label htmlFor="description">Description</label>
+                            <textarea
+                                name="description"
+                                rows="4"
+                                value={newTodo.description}
+                                onChange={handleTodoChange}
+                            />
+
+                            <button className="btn btn-primary">Create</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            <div className="container">
+                <h1>Todos</h1>
+                <ul>
+                    {data?.map(todo => {
+                        return (
+                            <li key={todo.id}>
+                                <p>{todo.title}</p>
+                                <p>{todo.description}</p>
+                                <input
+                                    name="completed"
+                                    type="checkbox"
+                                    checked={todo.completed}
+                                    onChange={e => handleTodoUpdate(e, todo)}
+                                />
+                            </li>
+                        )
+                    })}
+                </ul>
+            </div>
+        </div>
+    )
+}
+
+export default function App({ fallback }) {
+    return (
+        <SWRConfig value={{ fallback }}>
             <Todos />
-          </SWRConfig>
-        );
-      }
+        </SWRConfig>
+    )
+}
