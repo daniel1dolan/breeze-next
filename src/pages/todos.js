@@ -2,6 +2,7 @@ import useSWR, { SWRConfig, useSWRConfig } from 'swr'
 import { useState } from 'react'
 
 import axios from '@/lib/axios'
+import Todo from '@/components/Todo'
 
 const endpoints = {
     list: '/api/todos',
@@ -23,11 +24,14 @@ export async function getServerSideProps() {
     }
 }
 
+const dataMutator = (oldObj, newData) => {
+    return { ...oldObj, ...newData }
+}
+
 // TODO:
 // 2. Use CSS Grid
 // 3. The Form could be its own component separate from the list.
 // 4. Consider a getter and setter for data objects. Such as getting the id from a todo.
-
 const Todos = () => {
     const [newTodo, setNewTodo] = useState(initialTodoFormData)
     const { data } = useSWR(endpoints.list, () =>
@@ -42,6 +46,11 @@ const Todos = () => {
 
     const createTodo = async newData => {
         await axios.post(endpoints.list, newData)
+        mutate(endpoints.list)
+    }
+
+    const deleteTodo = async todo => {
+        await axios.delete(`${endpoints.list}/${todo.id}`)
         mutate(endpoints.list)
     }
 
@@ -62,12 +71,17 @@ const Todos = () => {
     }
 
     // Should separate the update logic from the todo check logic as update will expand.
-    const handleTodoUpdate = async (e, todo) => {
-        e.preventDefault()
-        console.log(e.target.name, e.target.checked)
-        console.log(todo)
-        const newData = { ...todo, [e.target.name]: e.target.checked }
-        updateTodo(todo.id, newData)
+    // const handleTodoUpdate = async (e, todo) => {
+    //     // e.preventDefault()
+    //     console.log(e.target.name, e.target.checked)
+    //     console.log(todo)
+    //     const newData = { ...todo, [e.target.name]: e.target.checked }
+    //     updateTodo(todo.id, newData)
+    // }
+    // Refactored to spread data into an object.
+    // Sends full object to the server.
+    const handleTodoUpdate = (todo, newDataObj) => {
+        updateTodo(todo.id, dataMutator(todo, newDataObj))
     }
 
     return (
@@ -103,16 +117,12 @@ const Todos = () => {
                 <ul>
                     {data?.map(todo => {
                         return (
-                            <li key={todo.id}>
-                                <p>{todo.title}</p>
-                                <p>{todo.description}</p>
-                                <input
-                                    name="completed"
-                                    type="checkbox"
-                                    checked={todo.completed}
-                                    onChange={e => handleTodoUpdate(e, todo)}
-                                />
-                            </li>
+                            <Todo
+                                key={todo.id}
+                                handleTodoUpdate={handleTodoUpdate}
+                                deleteTodo={deleteTodo}
+                                todo={todo}
+                            />
                         )
                     })}
                 </ul>
